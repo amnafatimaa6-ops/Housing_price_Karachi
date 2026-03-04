@@ -1,8 +1,12 @@
+# Streamlit's current working directory
+BASE_DIR = os.getcwd()
 
-try:
-    df = pd.read_excel("House_prices.xlsx")  # relative path
-except FileNotFoundError:
-    st.error("Dataset not found! Make sure House_prices.xlsx is in the same folder as app.py.")
+dataset_path = os.path.join(BASE_DIR, "House_prices.xlsx")
+
+if os.path.exists(dataset_path):
+    df = pd.read_excel(dataset_path)
+else:
+    st.error(f"Dataset not found at {dataset_path}.\nMake sure 'House_prices.xlsx' is in the same folder as app.py and pushed to repo.")
     st.stop()
 from housing_model import lr_model, tree_model, rf_model, df_encoded, df
 
