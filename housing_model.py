@@ -9,11 +9,6 @@ Original file is located at
 This dataset was independently compiled through manual research of publicly available real estate listings. It represents real-world housing data from multiple well-known residential areas in Karachi. The selected features — Area (sqft), Number of Bedrooms, Number of Bathrooms, Location, Furnishing status and, Price — were chosen to capture the most influential factors affecting property valuation in the local housing market. This dataset was created specifically for the purpose of developing and evaluating machine learning models for house price prediction.
 """
 
-print('pandas', pd.__version__)
-print('numpy', np.__version__)
-print('seaborn', sns.__version__)
-
-print('sklearn', sklearn.__version__)
 
 df = pd.read_excel("/content/House_prices.xlsx")
 df.head()
