@@ -3,17 +3,16 @@ import os
 import pandas as pd
 import streamlit as st
 
-# Get current working directory
 BASE_DIR = os.getcwd()
 dataset_path = os.path.join(BASE_DIR, "House_prices.csv")
 
-# Load CSV safely
-if os.path.exists(dataset_path):
-    df = pd.read_csv(dataset_path)
-else:
-    st.error(f"Dataset not found at {dataset_path}. Make sure 'House_prices.csv' is uploaded.")
+try:
+    df = pd.read_csv(dataset_path, encoding='utf-8', sep=',')
+    st.write("Dataset loaded successfully!")
+    st.dataframe(df.head())
+except Exception as e:
+    st.error(f"Error loading CSV: {e}")
     st.stop()
-
 # Optional: quick check
 st.write("Dataset loaded successfully!")
 st.dataframe(df.head())
