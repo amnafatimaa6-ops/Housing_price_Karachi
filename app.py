@@ -2,17 +2,21 @@
 import os
 import pandas as pd
 import streamlit as st
-# import your models
-# Streamlit's current working directory
+
+# Get current working directory
 BASE_DIR = os.getcwd()
+dataset_path = os.path.join(BASE_DIR, "House_prices.csv")
 
-dataset_path = os.path.join(BASE_DIR, "House_prices.xlsx")
-
+# Load CSV safely
 if os.path.exists(dataset_path):
-    df = pd.read_excel(dataset_path)
+    df = pd.read_csv(dataset_path)
 else:
-    st.error(f"Dataset not found at {dataset_path}.\nMake sure 'House_prices.xlsx' is in the same folder as app.py and pushed to repo.")
+    st.error(f"Dataset not found at {dataset_path}. Make sure 'House_prices.csv' is uploaded.")
     st.stop()
+
+# Optional: quick check
+st.write("Dataset loaded successfully!")
+st.dataframe(df.head())
 from housing_model import lr_model, tree_model, rf_model, df_encoded, df
 
 st.title(" Karachi Housing Price Predictor (ML Models)")
