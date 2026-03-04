@@ -10,8 +10,6 @@ This dataset was independently compiled through manual research of publicly avai
 """
 
 
-df = pd.read_excel("/content/House_prices.xlsx")
-df.head()
 
 """##EDA(Exploratory Data Analysis)"""
 
