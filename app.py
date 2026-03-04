@@ -1,4 +1,12 @@
+# Load dataset safely
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+dataset_path = os.path.join(BASE_DIR, "House_prices.xlsx")
 
+if os.path.exists(dataset_path):
+    df = pd.read_excel(dataset_path)
+else:
+    st.error("Dataset not found! Make sure House_prices.xlsx is in the same folder.")
+    st.stop()  # stop app if no dataset
 # Import your models a
 from housing_model import lr_model, tree_model, rf_model, df_encoded, df
 
