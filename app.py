@@ -2,96 +2,74 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from housing_model import load_and_preprocess, train_models
 
-# ------------------------
-# Load and preprocess data
-# ------------------------
-@st.cache_data
-def load_data(csv_file="House_prices (1).csv"):
-    df = pd.read_csv(csv_file)
-    
-    # Clean furnishing status
-    df['furnishing_status'] = df['furnishing_status'].replace('huuuhuhhhhhhh', 'Furnished')
-    
-    # Feature engineering
-    df['total_rooms'] = df['bedrooms'] + df['bathrooms']
-    df['price_per_sqft'] = df['price'] / df['area sqft']
-    
-    # One-hot encode categorical features
-    df_encoded = pd.get_dummies(df, columns=['property type', 'furnishing_status', 'location'], drop_first=True)
-    
-    # Standardize numeric features
-    scaler = StandardScaler()
-    num_features = ['bedrooms', 'bathrooms', 'area sqft', 'total_rooms', 'price_per_sqft']
-    df_encoded[num_features] = scaler.fit_transform(df_encoded[num_features])
-    
-    return df_encoded, scaler
-
-# ------------------------
-# Train models live
-# ------------------------
-@st.cache_data
-def train_models(df_encoded):
-    y = df_encoded['price']
-    X = df_encoded.drop(columns=['price'])
-    
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    lr = LinearRegression().fit(X_train, y_train)
-    dt = DecisionTreeRegressor(random_state=42).fit(X_train, y_train)
-    rf = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1).fit(X_train, y_train)
-    
-    return lr, dt, rf, X.columns
-
-# ------------------------
-# App UI
-# ------------------------
+st.set_page_config(page_title="Karachi Housing Price Predictor", layout="wide")
 st.title("🏠 Karachi Housing Price Predictor")
 
-df_encoded, scaler = load_data()
-lr_model, dt_model, rf_model, feature_cols = train_models(df_encoded)
+# Upload CSV
+uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    st.write("✅ Dataset loaded successfully!")
+    st.dataframe(df.head())
 
-# User input
-st.sidebar.header("Enter Property Details")
-prop_type = st.sidebar.selectbox("Property Type", ["House", "Apartment", "Penthouse"])
-bedrooms = st.sidebar.number_input("Bedrooms", min_value=1, max_value=10, value=3)
-bathrooms = st.sidebar.number_input("Bathrooms", min_value=1, max_value=10, value=2)
-area_sqft = st.sidebar.number_input("Area (sqft)", min_value=100, max_value=10000, value=1500)
-location = st.sidebar.selectbox("Location", ["Bahria Town", "DHA City", "Clifton", "Gulshan"])
+    # Preprocess
+    df_encoded, scaler = load_and_preprocess(uploaded_file)
+    st.write("✅ Data preprocessed.")
 
-# Prepare input for model
-input_df = pd.DataFrame({
-    "bedrooms": [bedrooms],
-    "bathrooms": [bathrooms],
-    "area sqft": [area_sqft],
-    "total_rooms": [bedrooms + bathrooms],
-    "price_per_sqft": [area_sqft / (bedrooms + bathrooms)]  # dummy, won't affect much
-})
+    # Train models
+    with st.spinner("Training models..."):
+        lr_model, dt_model, rf_model, feature_cols = train_models(df_encoded)
+    st.success("✅ Models trained!")
 
-# One-hot encode same way
-for col in feature_cols:
-    if col.startswith("property type_"):
-        input_df[col] = 1 if prop_type in col else 0
-    elif col.startswith("furnishing_status_"):
-        input_df[col] = 0  # default to Furnished
-    elif col.startswith("location_"):
-        input_df[col] = 1 if location in col else 0
+    # User input
+    st.header("Enter Property Details to Predict Price")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        prop_type = st.selectbox("Property Type", df['property type'].unique())
+    with col2:
+        bedrooms = st.number_input("Bedrooms", min_value=1, max_value=10, value=3)
+    with col3:
+        bathrooms = st.number_input("Bathrooms", min_value=1, max_value=10, value=2)
+    with col4:
+        area = st.number_input("Area (sqft)", min_value=100, value=1200)
 
-# Standardize numeric features
-num_features = ['bedrooms', 'bathrooms', 'area sqft', 'total_rooms', 'price_per_sqft']
-input_df[num_features] = scaler.transform(input_df[num_features])
+    col5, col6 = st.columns(2)
+    with col5:
+        location = st.selectbox("Location", df['location'].unique())
+    with col6:
+        furnishing = st.selectbox("Furnishing Status", df['furnishing_status'].unique())
 
-# Predict
-if st.button("Predict Price"):
-    pred_lr = lr_model.predict(input_df)[0]
-    pred_dt = dt_model.predict(input_df)[0]
-    pred_rf = rf_model.predict(input_df)[0]
-    
-    st.success(f"Linear Regression: PKR {pred_lr:,.0f}")
-    st.success(f"Decision Tree: PKR {pred_dt:,.0f}")
-    st.success(f"Random Forest: PKR {pred_rf:,.0f}")
+    if st.button("Predict Price"):
+        # Build dataframe
+        input_df = pd.DataFrame({
+            'bedrooms': [bedrooms],
+            'bathrooms': [bathrooms],
+            'area sqft': [area],
+            'total_rooms': [bedrooms + bathrooms],
+            'price_per_sqft': [0],  # placeholder, will scale
+            'property type_House': [1 if prop_type=="House" else 0],
+            'property type_Apartment': [1 if prop_type=="Apartment" else 0],
+            'furnishing_status_Furnished': [1 if furnishing=="Furnished" else 0],
+            'furnishing_status_Unfurnished': [1 if furnishing=="Unfurnished" else 0],
+            # Add location dummies
+            **{f'location_{loc}': 1 if loc==location else 0 for loc in df['location'].unique()}
+        })
+
+        # Scale numeric
+        input_df[['bedrooms', 'bathrooms', 'area sqft', 'total_rooms', 'price_per_sqft']] = scaler.transform(
+            input_df[['bedrooms', 'bathrooms', 'area sqft', 'total_rooms', 'price_per_sqft']]
+        )
+
+        # Align with training columns
+        input_df = input_df.reindex(columns=feature_cols, fill_value=0)
+
+        # Predict
+        pred_lr = lr_model.predict(input_df)[0]
+        pred_dt = dt_model.predict(input_df)[0]
+        pred_rf = rf_model.predict(input_df)[0]
+
+        st.write(f"**Linear Regression Prediction:** PKR {pred_lr:,.0f}")
+        st.write(f"**Decision Tree Prediction:** PKR {pred_dt:,.0f}")
+        st.write(f"**Random Forest Prediction:** PKR {pred_rf:,.0f}")
