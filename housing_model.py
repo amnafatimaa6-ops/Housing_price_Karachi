@@ -17,7 +17,9 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
     df = pd.read_csv(csv_file)
 
     # Fix furnishing status if there are bad entries
-    df['furnishing_status'] = df['furnishing_status'].replace('huuuhuhhhhhhh', 'Furnished')
+    df['furnishing_status'] = df['furnishing_status'].str.strip().str.capitalize()
+    df['property type'] = df['property type'].str.strip().str.capitalize()
+    df['location'] = df['location'].str.strip()
 
     # Feature engineering
     df['total_rooms'] = df['bedrooms'] + df['bathrooms']
@@ -25,7 +27,7 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
     df['log_price'] = np.log1p(df['price'])
     df['log_area'] = np.log1p(df['area sqft'])
 
-    # One-hot encode categorical features
+    # One-hot encode categorical features to match training columns
     df_encoded = pd.get_dummies(
         df,
         columns=['property type', 'furnishing_status', 'location'],
@@ -34,22 +36,22 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
 
     # Standardize numeric features
     scaler = StandardScaler()
-    num_features = ['bedrooms', 'bathrooms', 'area sqft', 'price', 'price_per_sqft', 'total_rooms', 'log_price', 'log_area']
+    num_features = ['bedrooms', 'bathrooms', 'area sqft', 'price',
+                    'price_per_sqft', 'total_rooms', 'log_price', 'log_area']
     df_encoded[num_features] = scaler.fit_transform(df_encoded[num_features])
 
     return df_encoded, scaler
 
 def train_linear_regression(df_encoded):
-    # Use raw price as target
     y = df_encoded['price']
-    X = df_encoded.drop(columns=['price', 'log_price'])  # keep features only
+    X = df_encoded.drop(columns=['price', 'log_price'])
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     lr_model = LinearRegression()
     lr_model.fit(X_train, y_train)
 
-    return lr_model, X.columns  # return trained model and feature names
+    return lr_model, X.columns
 
 def train_decision_tree(df_encoded):
     y = df_encoded['price']
@@ -78,7 +80,6 @@ def train_random_forest(df_encoded):
 
     return rf_model, X.columns
 
-# Convenience function to train all three models at once
 def train_all_models(csv_file="House_prices (1).csv"):
     df_encoded, scaler = load_and_preprocess(csv_file)
     lr, features_lr = train_linear_regression(df_encoded)
