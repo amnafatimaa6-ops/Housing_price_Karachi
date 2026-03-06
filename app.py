@@ -1,11 +1,15 @@
 # app.py
 import os
 import pandas as pd
+import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Import the function that trains the models
-from housing_model import run_models
+from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
 
 # ---------------- Dataset ----------------
 BASE_DIR = os.getcwd()
@@ -21,6 +25,25 @@ st.write("Dataset loaded successfully!")
 st.dataframe(df.head())
 
 # ---------------- Train models ----------------
+def run_models(df):
+    df_encoded = pd.get_dummies(df)
+    df_encoded['log_price'] = np.log1p(df['price'])
+
+    X = df_encoded.drop(['price', 'log_price'], axis=1)
+    y = df_encoded['log_price']
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    lr_model = LinearRegression()
+    tree_model = DecisionTreeRegressor()
+    rf_model = RandomForestRegressor()
+
+    lr_model.fit(X_train, y_train)
+    tree_model.fit(X_train, y_train)
+    rf_model.fit(X_train, y_train)
+
+    return lr_model, tree_model, rf_model, df_encoded
+
 lr_model, tree_model, rf_model, df_encoded = run_models(df)
 
 # ---------------- Streamlit UI ----------------
@@ -35,26 +58,27 @@ location = st.sidebar.selectbox("Location", df['location'].unique())
 property_type = st.sidebar.selectbox("Property Type", df['property type'].unique())
 
 # ---------- Preprocess user input ----------
-def preprocess_input(area, bedrooms, bathrooms, furnishing, location, property_type):
-    input_dict = {'area sqft': area, 'bedrooms': bedrooms, 'bathrooms': bathrooms}
+def preprocess_input(area, bedrooms, bathrooms, furnishing, location, property_type, df_encoded):
+    # Start with zeros for all columns
+    input_dict = dict.fromkeys(df_encoded.drop(['price','log_price'], axis=1).columns, 0)
 
-    # One-hot columns from df_encoded
-    for col in df_encoded.columns:
-        if 'property type_' in col or 'furnishing_status_' in col or 'location_' in col:
-            input_dict[col] = 0
+    # Set numeric values
+    input_dict['area sqft'] = area
+    input_dict['bedrooms'] = bedrooms
+    input_dict['bathrooms'] = bathrooms
 
-    # Set 1 for selected input
-    if f'property type_{property_type}' in df_encoded.columns:
-        input_dict[f'property type_{property_type}'] = 1
-    if f'furnishing_status_{furnishing}' in df_encoded.columns:
-        input_dict[f'furnishing_status_{furnishing}'] = 1
-    if f'location_{location}' in df_encoded.columns:
-        input_dict[f'location_{location}'] = 1
+    # Set 1 for selected categorical features
+    for col_name in [
+        f'property type_{property_type}',
+        f'furnishing_status_{furnishing}',
+        f'location_{location}'
+    ]:
+        if col_name in input_dict:
+            input_dict[col_name] = 1
 
-    input_df = pd.DataFrame([input_dict])
-    return input_df
+    return pd.DataFrame([input_dict])
 
-input_df = preprocess_input(area, bedrooms, bathrooms, furnishing, location, property_type)
+input_df = preprocess_input(area, bedrooms, bathrooms, furnishing, location, property_type, df_encoded)
 
 # ---------- Predictions ----------
 pred_lr = lr_model.predict(input_df)[0]
@@ -62,19 +86,19 @@ pred_tree = tree_model.predict(input_df)[0]
 pred_rf = rf_model.predict(input_df)[0]
 
 st.subheader("Predicted Prices")
-st.write(f"Linear Regression: PKR {pred_lr:,.0f}")
-st.write(f"Decision Tree: PKR {pred_tree:,.0f}")
-st.write(f"Random Forest: PKR {pred_rf:,.0f}")
+st.write(f"Linear Regression: PKR {np.expm1(pred_lr):,.0f}")
+st.write(f"Decision Tree: PKR {np.expm1(pred_tree):,.0f}")
+st.write(f"Random Forest: PKR {np.expm1(pred_rf):,.0f}")
 
 # ---------- Random Forest: Actual vs Predicted plot ----------
 st.subheader("Random Forest: Actual vs Predicted (Sample from Dataset)")
-y_tree = df['price']
-X_tree = df_encoded.drop(columns=['price', 'log_price'], errors='ignore')
-rf_pred_full = rf_model.predict(X_tree)
+y_actual = df['price']
+X_rf = df_encoded.drop(['price', 'log_price'], axis=1)
+rf_pred_full = np.expm1(rf_model.predict(X_rf))
 
 plt.figure(figsize=(8,6))
-plt.scatter(y_tree, rf_pred_full, alpha=0.7, color='royalblue', edgecolor='k')
-plt.plot([y_tree.min(), y_tree.max()], [y_tree.min(), y_tree.max()], 'r--')
+plt.scatter(y_actual, rf_pred_full, alpha=0.7, color='royalblue', edgecolor='k')
+plt.plot([y_actual.min(), y_actual.max()], [y_actual.min(), y_actual.max()], 'r--')
 plt.xlabel("Actual Price")
 plt.ylabel("Predicted Price")
 plt.title("Random Forest Predictions")
