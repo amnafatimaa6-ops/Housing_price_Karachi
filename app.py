@@ -43,6 +43,15 @@ with col5:
 with col6:
     furnishing = st.selectbox("Furnishing Status", df['furnishing_status'].unique())
 
+def format_price(num):
+    """Convert raw number to Lakh/Cr format."""
+    if num >= 10_000_000:
+        return f"{num/10_000_000:.2f} Cr"
+    elif num >= 100_000:
+        return f"{num/100_000:.2f} Lakh"
+    else:
+        return f"{num:,.0f}"  # below 1 Lakh, show raw
+
 if st.button("Predict Price"):
     input_df = pd.DataFrame({
         'bedrooms':[bedrooms],
@@ -70,7 +79,9 @@ if st.button("Predict Price"):
     pred_rf = rf_model.predict(input_df)[0]
 
     st.subheader("Predicted Price")
-    st.write(f"**Linear Regression:** PKR {pred_lr:,.0f}")
-    st.write(f"**Decision Tree:** PKR {pred_dt:,.0f}")
-    st.write(f"**Random Forest:** PKR {pred_rf:,.0f}")
-    st.write(f"**Average Prediction:** PKR {(pred_lr+pred_dt+pred_rf)/3:,.0f}")
+    st.write(f"**Linear Regression:** {format_price(pred_lr)}")
+    st.write(f"**Decision Tree:** {format_price(pred_dt)}")
+    st.write(f"**Random Forest:** {format_price(pred_rf)}")
+
+    avg_pred = (pred_lr + pred_dt + pred_rf) / 3
+    st.write(f"**Average Prediction:** {format_price(avg_pred)}")
