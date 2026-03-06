@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """housing_model.py
-Cleaned, robust version for Streamlit usage.
-Handles data preprocessing, trains models, and returns them for prediction.
+Full working version for Streamlit CSV upload.
+Handles preprocessing, scaling, one-hot encoding, and trains LR, DT, RF.
 """
 
 import pandas as pd
@@ -12,18 +12,24 @@ from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 
-def load_and_preprocess(csv_file="House_prices (1).csv"):
-    # Load dataset
+def load_and_preprocess(csv_file):
+    """
+    Accepts either file path (str) or Streamlit uploaded file object.
+    Returns processed dataframe and fitted scaler.
+    """
+    # Handle uploaded file
+    if not isinstance(csv_file, str):
+        csv_file.seek(0)
     df = pd.read_csv(csv_file)
 
     # Fix furnishing status
     df['furnishing_status'] = df['furnishing_status'].replace('huuuhuhhhhhhh', 'Furnished')
 
-    # Ensure numeric columns are correct type
+    # Ensure numeric columns
     for col in ['bedrooms', 'bathrooms', 'area sqft', 'price']:
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # Drop rows with missing or invalid values
+    # Drop invalid rows
     df = df.dropna(subset=['bedrooms', 'bathrooms', 'area sqft', 'price'])
     df = df[df['area sqft'] > 0]
 
@@ -43,17 +49,24 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
     num_features = ['bedrooms', 'bathrooms', 'area sqft', 'total_rooms', 'price_per_sqft']
     df_encoded[num_features] = scaler.fit_transform(df_encoded[num_features])
 
-    # Ensure no NaNs or infinities remain
+    # Replace any remaining NaNs/Infs
     df_encoded = df_encoded.replace([np.inf, -np.inf], np.nan).fillna(0)
 
     return df_encoded, scaler
 
 def train_models(df_encoded):
+    """
+    Trains Linear Regression, Decision Tree, Random Forest.
+    Returns trained models and feature columns.
+    """
+    if 'price' not in df_encoded.columns:
+        raise ValueError("Target column 'price' missing in dataset.")
+
     y = df_encoded['price']
     X = df_encoded.drop(columns=['price'])
 
-    # Ensure all numeric
-    X = X.apply(pd.to_numeric, errors='coerce').replace([np.inf, -np.inf], np.nan).fillna(0)
+    # Ensure numeric stability
+    X = X.replace([np.inf, -np.inf], np.nan).fillna(0)
 
     # Split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
