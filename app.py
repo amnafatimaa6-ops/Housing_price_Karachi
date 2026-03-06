@@ -1,48 +1,101 @@
+import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
 
-def run_models(df):
-    """
-    Takes the housing dataframe and returns trained models
-    along with the encoded dataframe.
-    """
+from housing_model import run_models
 
-    # Clean column names (removes hidden spaces that often cause errors)
-    df.columns = df.columns.str.strip()
+st.set_page_config(page_title="Karachi Housing Price Predictor", layout="centered")
 
-    # Clean categorical columns
-    categorical_cols = ['property type', 'furnishing_status', 'location']
-    for col in categorical_cols:
-        df[col] = df[col].astype(str).str.strip()
+st.title("🏠 Karachi Housing Price Predictor")
 
-    # One-hot encode categorical features
-    df_encoded = pd.get_dummies(df, columns=categorical_cols)
+st.write(
+"This app predicts property prices in Karachi using Machine Learning models "
+"(Linear Regression, Decision Tree, Random Forest)."
+)
 
-    # Log transform price for stability
-    df_encoded['log_price'] = np.log1p(df_encoded['price'])
+# Load dataset
 
-    # Features and target
-    X = df_encoded.drop(columns=['price', 'log_price'])
-    y = df_encoded['log_price']
+df = pd.read_excel("House_prices.xlsx")
 
-    # Train-test split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+# Train models
 
-    # Models
-    lr_model = LinearRegression()
-    tree_model = DecisionTreeRegressor(random_state=42)
-    rf_model = RandomForestRegressor(n_estimators=200, random_state=42)
+lr_model, tree_model, rf_model, feature_cols = run_models(df)
 
-    # Train models
-    lr_model.fit(X_train, y_train)
-    tree_model.fit(X_train, y_train)
-    rf_model.fit(X_train, y_train)
+st.sidebar.header("Property Details")
 
-    # Return trained models + feature columns for prediction later
-    return lr_model, tree_model, rf_model, X.columns.tolist()
+# User Inputs
+
+property_type = st.sidebar.selectbox(
+"Property Type",
+df["property type"].unique()
+)
+
+location = st.sidebar.selectbox(
+"Location",
+df["location"].unique()
+)
+
+furnishing = st.sidebar.selectbox(
+"Furnishing Status",
+df["furnishing_status"].unique()
+)
+
+area = st.sidebar.number_input(
+"Area (sqft)",
+min_value=100,
+max_value=100000,
+value=1000
+)
+
+bedrooms = st.sidebar.number_input(
+"Bedrooms",
+min_value=1,
+max_value=10,
+value=3
+)
+
+bathrooms = st.sidebar.number_input(
+"Bathrooms",
+min_value=1,
+max_value=10,
+value=3
+)
+
+# Create input dataframe
+
+input_data = pd.DataFrame({
+"property type": [property_type],
+"location": [location],
+"furnishing_status": [furnishing],
+"area sqft": [area],
+"bedrooms": [bedrooms],
+"bathrooms": [bathrooms]
+})
+
+# One-hot encode like training data
+
+input_encoded = pd.get_dummies(input_data)
+
+# Align columns with training data
+
+input_encoded = input_encoded.reindex(columns=feature_cols, fill_value=0)
+
+# Prediction button
+
+if st.button("Predict Price"):
+
+```
+lr_pred = np.expm1(lr_model.predict(input_encoded))[0]
+tree_pred = np.expm1(tree_model.predict(input_encoded))[0]
+rf_pred = np.expm1(rf_model.predict(input_encoded))[0]
+
+st.subheader("Predicted Prices")
+
+st.write(f"Linear Regression: PKR {lr_pred:,.0f}")
+st.write(f"Decision Tree: PKR {tree_pred:,.0f}")
+st.write(f"Random Forest: PKR {rf_pred:,.0f}")
+
+avg_price = (lr_pred + tree_pred + rf_pred) / 3
+
+st.success(f"Estimated Market Price: PKR {avg_price:,.0f}")
+```
