@@ -1,55 +1,50 @@
 import streamlit as st
 import pandas as pd
-from sklearn.linear_model import LinearRegression
-
-st.title("🏠 Karachi Housing Price Predictor")
-
-st.write("Enter property details to predict the price.")
+import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import OneHotEncoder
 
 # Load dataset
-data = pd.read_csv("House_prices (1).csv")
+df = pd.read_csv("House_prices (1).csv")
 
-# Encode location
-location_map = {
-    "DHA": 0,
-    "Clifton": 1,
-    "Gulshan": 2,
-    "North Nazimabad": 3,
-    "PECHS": 4
-}
-
-data["location"] = data["location"].map(location_map)
-
-# Features and target
-X = data[["area", "bedrooms", "bathrooms", "location"]]
-y = data["price"]
-
-# Train model
-model = LinearRegression()
-model.fit(X, y)
+st.title("🏠 Karachi Housing Price Predictor")
+st.write("Enter property details to predict the price.")
 
 # User Inputs
-area = st.number_input("Area (Square Feet)", min_value=100, max_value=10000, value=1200)
+property_type = st.selectbox("Property Type", df['property type'].unique())
 bedrooms = st.number_input("Bedrooms", min_value=1, max_value=10, value=3)
 bathrooms = st.number_input("Bathrooms", min_value=1, max_value=10, value=2)
+area = st.number_input("Area (sqft)", min_value=100, max_value=10000, value=1200)
+location = st.selectbox("Location", df['location'].unique())
+furnishing = st.selectbox("Furnishing Status", df['furnishing_status'].unique())
 
-location = st.selectbox(
-    "Location",
-    ["DHA", "Clifton", "Gulshan", "North Nazimabad", "PECHS"]
-)
+# Prepare training data
+X = df[['property type', 'bedrooms', 'bathrooms', 'area sqft', 'location', 'furnishing_status']]
+y = df['price']
 
-location_encoded = location_map[location]
+# One-hot encoding
+encoder = OneHotEncoder(drop='first', sparse=False)
+X_encoded = encoder.fit_transform(X[['property type', 'location', 'furnishing_status']])
+X_final = np.concatenate([X_encoded, X[['bedrooms', 'bathrooms', 'area sqft']].values], axis=1)
 
-# Prediction
+# Train Random Forest
+model = RandomForestRegressor(n_estimators=200, random_state=42)
+model.fit(X_final, y)
+
+# Prepare input for prediction
+input_df = pd.DataFrame({
+    'property type': [property_type],
+    'bedrooms': [bedrooms],
+    'bathrooms': [bathrooms],
+    'area sqft': [area],
+    'location': [location],
+    'furnishing_status': [furnishing]
+})
+
+input_encoded = encoder.transform(input_df[['property type', 'location', 'furnishing_status']])
+input_final = np.concatenate([input_encoded, input_df[['bedrooms', 'bathrooms', 'area sqft']].values], axis=1)
+
+# Predict
 if st.button("Predict Price"):
-
-    input_data = pd.DataFrame({
-        "area": [area],
-        "bedrooms": [bedrooms],
-        "bathrooms": [bathrooms],
-        "location": [location_encoded]
-    })
-
-    prediction = model.predict(input_data)
-
+    prediction = model.predict(input_final)
     st.success(f"Estimated House Price: PKR {prediction[0]:,.0f}")
