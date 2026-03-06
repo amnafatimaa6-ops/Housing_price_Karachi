@@ -9,7 +9,7 @@ from sklearn.impute import SimpleImputer
 def run_models(df):
     """
     Takes the raw housing dataframe and returns trained ML models
-    along with the one-hot encoded dataframe for predictions in Streamlit.
+    along with the one-hot encoded dataframe for predictions.
     """
 
     # Strip whitespace from categorical columns
@@ -17,22 +17,32 @@ def run_models(df):
     for col in cat_cols:
         df[col] = df[col].astype(str).str.strip()
 
+    # Ensure numeric columns are numeric
+    num_cols = ['bedrooms', 'bathrooms', 'area sqft', 'price']
+    for col in num_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
     # One-hot encode categorical variables
-    df_encoded = pd.get_dummies(df, drop_first=True)  # drop_first avoids multicollinearity
+    df_encoded = pd.get_dummies(df, drop_first=True)
 
     # Add log_price for stability
-    df_encoded['log_price'] = np.log1p(df['price'])
+    df_encoded['log_price'] = np.log1p(df_encoded['price'])
 
     # Prepare features and target
     X = df_encoded.drop(['price', 'log_price'], axis=1)
     y = df_encoded['log_price']
 
-    # Ensure no NaNs sneak in
+    # Impute just in case (no NaNs should exist, but safe)
     imputer = SimpleImputer(strategy='mean')
     X_imputed = pd.DataFrame(imputer.fit_transform(X), columns=X.columns)
 
+    # Ensure all columns are float
+    X_imputed = X_imputed.astype(float)
+
     # Split dataset
-    X_train, X_test, y_train, y_test = train_test_split(X_imputed, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_imputed, y, test_size=0.2, random_state=42
+    )
 
     # Initialize models
     lr_model = LinearRegression()
