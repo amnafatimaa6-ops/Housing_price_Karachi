@@ -1,101 +1,44 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+import joblib
 
-from housing_model import run_models
-
-st.set_page_config(page_title="Karachi Housing Price Predictor", layout="centered")
+# Load trained model
+model = joblib.load("housing_model.pkl")
 
 st.title("🏠 Karachi Housing Price Predictor")
 
-st.write(
-"This app predicts property prices in Karachi using Machine Learning models "
-"(Linear Regression, Decision Tree, Random Forest)."
-)
-
-# Load dataset
-
-df = pd.read_excel("House_prices.xlsx")
-
-# Train models
-
-lr_model, tree_model, rf_model, feature_cols = run_models(df)
-
-st.sidebar.header("Property Details")
+st.write("Enter property details to predict the price.")
 
 # User Inputs
-
-property_type = st.sidebar.selectbox(
-"Property Type",
-df["property type"].unique()
+area = st.number_input("Area (Square Feet)", min_value=100, max_value=10000, value=1200)
+bedrooms = st.number_input("Bedrooms", min_value=1, max_value=10, value=3)
+bathrooms = st.number_input("Bathrooms", min_value=1, max_value=10, value=2)
+location = st.selectbox(
+    "Location",
+    ["DHA", "Clifton", "Gulshan", "North Nazimabad", "PECHS"]
 )
 
-location = st.sidebar.selectbox(
-"Location",
-df["location"].unique()
-)
+# Encode location (simple example)
+location_map = {
+    "DHA": 0,
+    "Clifton": 1,
+    "Gulshan": 2,
+    "North Nazimabad": 3,
+    "PECHS": 4
+}
 
-furnishing = st.sidebar.selectbox(
-"Furnishing Status",
-df["furnishing_status"].unique()
-)
-
-area = st.sidebar.number_input(
-"Area (sqft)",
-min_value=100,
-max_value=100000,
-value=1000
-)
-
-bedrooms = st.sidebar.number_input(
-"Bedrooms",
-min_value=1,
-max_value=10,
-value=3
-)
-
-bathrooms = st.sidebar.number_input(
-"Bathrooms",
-min_value=1,
-max_value=10,
-value=3
-)
-
-# Create input dataframe
-
-input_data = pd.DataFrame({
-"property type": [property_type],
-"location": [location],
-"furnishing_status": [furnishing],
-"area sqft": [area],
-"bedrooms": [bedrooms],
-"bathrooms": [bathrooms]
-})
-
-# One-hot encode like training data
-
-input_encoded = pd.get_dummies(input_data)
-
-# Align columns with training data
-
-input_encoded = input_encoded.reindex(columns=feature_cols, fill_value=0)
+location_encoded = location_map[location]
 
 # Prediction button
-
 if st.button("Predict Price"):
 
-```
-lr_pred = np.expm1(lr_model.predict(input_encoded))[0]
-tree_pred = np.expm1(tree_model.predict(input_encoded))[0]
-rf_pred = np.expm1(rf_model.predict(input_encoded))[0]
+    input_data = pd.DataFrame({
+        "area": [area],
+        "bedrooms": [bedrooms],
+        "bathrooms": [bathrooms],
+        "location": [location_encoded]
+    })
 
-st.subheader("Predicted Prices")
+    prediction = model.predict(input_data)
 
-st.write(f"Linear Regression: PKR {lr_pred:,.0f}")
-st.write(f"Decision Tree: PKR {tree_pred:,.0f}")
-st.write(f"Random Forest: PKR {rf_pred:,.0f}")
-
-avg_price = (lr_pred + tree_pred + rf_pred) / 3
-
-st.success(f"Estimated Market Price: PKR {avg_price:,.0f}")
-```
+    st.success(f"Estimated House Price: PKR {prediction[0]:,.0f}")
