@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score, KFold
 from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
@@ -39,20 +39,36 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
 
     return df_encoded, scaler, df
 
-def train_models(df_encoded):
+def train_models(df_encoded, cv_folds=5):
     y = df_encoded['price']
     X = df_encoded.drop(columns=['price'])
 
     X = X.replace([np.inf,-np.inf],0).fillna(0)
 
-    X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2,random_state=42)
+    # Split for final holdout evaluation
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    lr = LinearRegression().fit(X_train,y_train)
-    dt = DecisionTreeRegressor(random_state=42).fit(X_train,y_train)
-    rf = RandomForestRegressor(n_estimators=200,random_state=42,n_jobs=-1).fit(X_train,y_train)
+    # Initialize models
+    lr = LinearRegression()
+    dt = DecisionTreeRegressor(random_state=42)
+    rf = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1)
 
-    acc_lr = r2_score(y_test, lr.predict(X_test))
-    acc_dt = r2_score(y_test, dt.predict(X_test))
-    acc_rf = r2_score(y_test, rf.predict(X_test))
+    # Cross-validation for more stable accuracy
+    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    acc_lr = np.mean(cross_val_score(lr, X_train, y_train, cv=kf, scoring='r2'))
+    acc_dt = np.mean(cross_val_score(dt, X_train, y_train, cv=kf, scoring='r2'))
+    acc_rf = np.mean(cross_val_score(rf, X_train, y_train, cv=kf, scoring='r2'))
+
+    # Fit on full training set
+    lr.fit(X_train, y_train)
+    dt.fit(X_train, y_train)
+    rf.fit(X_train, y_train)
+
+    # Optional: final evaluation on holdout set
+    holdout_acc_lr = r2_score(y_test, lr.predict(X_test))
+    holdout_acc_dt = r2_score(y_test, dt.predict(X_test))
+    holdout_acc_rf = r2_score(y_test, rf.predict(X_test))
+
+    print(f"[Holdout R²] LR: {holdout_acc_lr:.2f}, DT: {holdout_acc_dt:.2f}, RF: {holdout_acc_rf:.2f}")
 
     return lr, dt, rf, X.columns, (acc_lr, acc_dt, acc_rf)
