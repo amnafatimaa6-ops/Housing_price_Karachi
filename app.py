@@ -1,4 +1,3 @@
-
 import os
 import pandas as pd
 import streamlit as st
@@ -7,8 +6,8 @@ BASE_DIR = os.getcwd()
 dataset_path = os.path.join(BASE_DIR, "House_prices.csv")
 
 try:
-    df = pd.read_csv(dataset_path, encoding='utf-8', sep=',')
-    st.write("Dataset loaded successfully!")
+    df = pd.read_csv(dataset_path, encoding='utf-8', on_bad_lines='skip')
+    st.write("Dataset loaded successfully (bad lines skipped)!")
     st.dataframe(df.head())
 except Exception as e:
     st.error(f"Error loading CSV: {e}")
