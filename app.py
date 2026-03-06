@@ -1,7 +1,13 @@
+# app.py
 import os
 import pandas as pd
 import streamlit as st
+import matplotlib.pyplot as plt
 
+# Import the function that trains the models
+from housing_model import run_models
+
+# ---------------- Dataset ----------------
 BASE_DIR = os.getcwd()
 dataset_path = os.path.join(BASE_DIR, "House_prices (1).csv")
 
@@ -13,9 +19,12 @@ except Exception as e:
 
 st.write("Dataset loaded successfully!")
 st.dataframe(df.head())
-from housing_model import lr_model, tree_model, rf_model, df_encoded, df
 
-st.title(" Karachi Housing Price Predictor (ML Models)")
+# ---------------- Train models ----------------
+lr_model, tree_model, rf_model, df_encoded = run_models(df)
+
+# ---------------- Streamlit UI ----------------
+st.title("Karachi Housing Price Predictor (ML Models)")
 
 st.sidebar.header("Enter Property Details")
 area = st.sidebar.number_input("Area (sqft)", 100, 100000, 1000, 50)
@@ -52,7 +61,7 @@ pred_lr = lr_model.predict(input_df)[0]
 pred_tree = tree_model.predict(input_df)[0]
 pred_rf = rf_model.predict(input_df)[0]
 
-st.subheader(" Predicted Prices")
+st.subheader("Predicted Prices")
 st.write(f"Linear Regression: PKR {pred_lr:,.0f}")
 st.write(f"Decision Tree: PKR {pred_tree:,.0f}")
 st.write(f"Random Forest: PKR {pred_rf:,.0f}")
