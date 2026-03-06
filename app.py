@@ -3,18 +3,13 @@ import pandas as pd
 import streamlit as st
 
 BASE_DIR = os.getcwd()
-dataset_path = os.path.join(BASE_DIR, "House_prices.csv")
+dataset_path = os.path.join(BASE_DIR, "House_prices (1).csv")
 
 try:
     df = pd.read_csv(dataset_path, encoding="latin1", on_bad_lines="skip")
-    st.write("Dataset loaded successfully!")
-    st.dataframe(df.head())
 except Exception as e:
     st.error(f"Error loading CSV: {e}")
     st.stop()
-
-
-
 
 st.write("Dataset loaded successfully!")
 st.dataframe(df.head())
