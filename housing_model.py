@@ -5,7 +5,7 @@ from sklearn.model_selection import train_test_split, KFold, cross_val_score
 from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
-from sklearn.preprocessing import RobustScaler, PolynomialFeatures
+from sklearn.preprocessing import RobustScaler
 from sklearn.metrics import r2_score
 
 def load_and_preprocess(csv_file="House_prices (1).csv"):
@@ -24,7 +24,6 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
 
     # Feature engineering
     df['total_rooms'] = df['bedrooms'] + df['bathrooms']
-    df['price_per_sqft'] = df['price'] / df['area sqft']
 
     # LOCATION FEATURE: average price per location
     location_avg_price = df.groupby('location')['price'].mean().to_dict()
@@ -33,38 +32,31 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
     # One-hot encode categorical columns except location
     df_encoded = pd.get_dummies(df, columns=['property type','furnishing_status'], drop_first=True)
 
-    # Polynomial features for numeric columns
-    num_features = ['bedrooms','bathrooms','area sqft','total_rooms','price_per_sqft','location_avg_price']
-    poly = PolynomialFeatures(degree=2, interaction_only=False, include_bias=False)
-    poly_features = poly.fit_transform(df_encoded[num_features])
-    poly_feature_names = poly.get_feature_names_out(num_features)
-    df_poly = pd.DataFrame(poly_features, columns=poly_feature_names, index=df_encoded.index)
-
-    # Merge polynomial features with categorical
-    df_encoded = pd.concat([df_poly, df_encoded.drop(columns=num_features + ['location'])], axis=1)
-
     # Scale numeric features
+    num_features = ['bedrooms','bathrooms','area sqft','total_rooms','location_avg_price']
     scaler = RobustScaler()
-    df_encoded[poly_feature_names] = scaler.fit_transform(df_encoded[poly_feature_names])
+    df_encoded[num_features] = scaler.fit_transform(df_encoded[num_features])
 
-    # Replace any inf/nan
-    df_encoded = df_encoded.replace([np.inf,-np.inf],0).fillna(0)
+    # Log-transform price to reduce variance
+    df_encoded['price'] = np.log1p(df_encoded['price'])
 
-    return df_encoded, scaler, poly, poly_feature_names, df
+    df_encoded = df_encoded.replace([np.inf, -np.inf], 0).fillna(0)
+
+    return df_encoded, scaler, num_features, df
 
 def train_models(df_encoded, cv_folds=5):
     y = df_encoded['price']
     X = df_encoded.drop(columns=['price'])
-    X = X.replace([np.inf,-np.inf],0).fillna(0)
+    X = X.replace([np.inf, -np.inf], 0).fillna(0)
 
     # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # Initialize models
+    # Initialize models with reasonable regularization to avoid overfitting
     lr = LinearRegression()
-    dt = DecisionTreeRegressor(max_depth=15, random_state=42)
-    rf = RandomForestRegressor(n_estimators=500, max_depth=15, random_state=42, n_jobs=-1)
-    gb = HistGradientBoostingRegressor(max_iter=500, max_depth=5, learning_rate=0.05, random_state=42)
+    dt = DecisionTreeRegressor(max_depth=7, random_state=42)
+    rf = RandomForestRegressor(n_estimators=200, max_depth=10, random_state=42, n_jobs=-1)
+    gb = HistGradientBoostingRegressor(max_iter=200, max_depth=5, learning_rate=0.05, random_state=42)
 
     # Cross-validation
     kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
@@ -92,5 +84,4 @@ def train_models(df_encoded, cv_folds=5):
 
     print(f"[Holdout R²] LR: {holdout_acc_lr:.2f}, DT: {holdout_acc_dt:.2f}, RF: {holdout_acc_rf:.2f}, GB: {holdout_acc_gb:.2f}")
 
-    # Return models, feature columns, CV accuracies
     return lr, dt, rf, gb, X.columns, (acc_lr, acc_dt, acc_rf, acc_gb)
