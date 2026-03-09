@@ -3,7 +3,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from housing_model import load_and_preprocess, train_models
-from sklearn.preprocessing import PolynomialFeatures
 
 # 1️⃣ Page setup
 st.set_page_config(page_title="Karachi Housing Price Predictor", layout="wide")
@@ -11,8 +10,7 @@ st.title("🏠 Karachi Housing Price Predictor")
 
 # 2️⃣ Load & preprocess dataset
 try:
-    df_encoded, scaler, df = load_and_preprocess("House_prices (1).csv")
-    st.success("✅ Dataset loaded & preprocessed!")
+    df_encoded, scaler, poly, poly_feature_names, df = load_and_preprocess("House_prices (1).csv")
 except Exception as e:
     st.error(f"Failed to load dataset: {e}")
     st.stop()
@@ -63,7 +61,7 @@ if st.button("Predict Price"):
         'bathrooms':[bathrooms],
         'area sqft':[area],
         'total_rooms':[bedrooms+bathrooms],
-        'price_per_sqft':[0],  # placeholder, scaled later
+        'price_per_sqft':[0],  # placeholder
         'location_avg_price':[df[df['location']==location]['price'].mean()],
         'property type_House':[1 if prop_type=="House" else 0],
         'property type_Apartment':[1 if prop_type=="Apartment" else 0],
@@ -71,20 +69,17 @@ if st.button("Predict Price"):
         'furnishing_status_Unfurnished':[1 if furnishing=="Unfurnished" else 0]
     })
 
-    # Polynomial features
-    num_features = ['bedrooms','bathrooms','area sqft','total_rooms','price_per_sqft','location_avg_price']
-    poly = PolynomialFeatures(degree=2, interaction_only=False, include_bias=False)
-    poly_features = poly.fit_transform(input_df[num_features])
-    poly_feature_names = poly.get_feature_names_out(num_features)
+    # Polynomial transform using the trained poly
+    poly_features = poly.transform(input_df[['bedrooms','bathrooms','area sqft','total_rooms','price_per_sqft','location_avg_price']])
     df_poly = pd.DataFrame(poly_features, columns=poly_feature_names)
 
-    # Merge with categorical
-    input_df_final = pd.concat([df_poly, input_df.drop(columns=num_features)], axis=1)
+    # Merge with categorical columns
+    input_df_final = pd.concat([df_poly, input_df.drop(columns=['bedrooms','bathrooms','area sqft','total_rooms','price_per_sqft','location_avg_price'])], axis=1)
 
-    # Scale numeric
+    # Scale numeric features using the trained scaler
     input_df_final[poly_feature_names] = scaler.transform(df_poly)
 
-    # Align columns
+    # Align columns with training set
     input_df_final = input_df_final.reindex(columns=feature_cols, fill_value=0)
 
     # Predict with all models
