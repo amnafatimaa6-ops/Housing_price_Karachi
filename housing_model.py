@@ -33,7 +33,7 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
     # One-hot encode categorical columns except location (already handled)
     df_encoded = pd.get_dummies(df, columns=['property type','furnishing_status'], drop_first=True)
 
-    # Optionally: add polynomial features for numeric columns to capture non-linearities
+    # Polynomial features for numeric columns to capture non-linearities
     num_features = ['bedrooms','bathrooms','area sqft','total_rooms','price_per_sqft','location_avg_price']
     poly = PolynomialFeatures(degree=2, interaction_only=False, include_bias=False)
     poly_features = poly.fit_transform(df_encoded[num_features])
@@ -91,4 +91,4 @@ def train_models(df_encoded, cv_folds=5):
 
     print(f"[Holdout R²] LR: {holdout_acc_lr:.2f}, DT: {holdout_acc_dt:.2f}, RF: {holdout_acc_rf:.2f}, GB: {holdout_acc_gb:.2f}")
 
-    return lr, dt, rf, gb, X.columns, (acc_lr, acc_dt, acc_rf, acc_gb)
+    return lr, dt, rf, gb, X.columns
