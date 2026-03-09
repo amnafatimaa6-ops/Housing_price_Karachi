@@ -1,96 +1,110 @@
 # -*- coding: utf-8 -*-
+import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, KFold, cross_val_score
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
-from sklearn.preprocessing import RobustScaler, PolynomialFeatures
-from sklearn.metrics import r2_score
+from housing_model import load_and_preprocess, train_models
+from sklearn.preprocessing import PolynomialFeatures
 
-def load_and_preprocess(csv_file="House_prices (1).csv"):
-    df = pd.read_csv(csv_file)
+# 1️⃣ Page setup
+st.set_page_config(page_title="Karachi Housing Price Predictor", layout="wide")
+st.title("🏠 Karachi Housing Price Predictor")
 
-    # Fix furnishing typo
-    df['furnishing_status'] = df['furnishing_status'].replace('huuuhuhhhhhhh', 'Furnished')
+# 2️⃣ Load & preprocess dataset
+try:
+    df_encoded, scaler, df = load_and_preprocess("House_prices (1).csv")
+    st.success("✅ Dataset loaded & preprocessed!")
+except Exception as e:
+    st.error(f"Failed to load dataset: {e}")
+    st.stop()
 
-    # Numeric conversion
-    for col in ['bedrooms','bathrooms','area sqft','price']:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+# 3️⃣ Train models
+with st.spinner("Training models..."):
+    lr_model, dt_model, rf_model, gb_model, feature_cols, accuracies = train_models(df_encoded)
 
-    # Drop NaNs and extreme outliers
-    df = df.dropna(subset=['bedrooms','bathrooms','area sqft','price'])
-    df = df[(df['area sqft'] > 100) & (df['price'] > 50000) & (df['price'] < 15e7)]
+# 4️⃣ Display model R²
+acc_lr, acc_dt, acc_rf, acc_gb = accuracies
+st.subheader("Model Accuracy (R²)")
+st.write(f"**Linear Regression:** {acc_lr:.2f}")
+st.write(f"**Decision Tree:** {acc_dt:.2f}")
+st.write(f"**Random Forest:** {acc_rf:.2f}")
+st.write(f"**Gradient Boosting:** {acc_gb:.2f}")
 
-    # Feature engineering
-    df['total_rooms'] = df['bedrooms'] + df['bathrooms']
-    df['price_per_sqft'] = df['price'] / df['area sqft']
+# 5️⃣ User input
+st.header("Enter Property Details")
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    prop_type = st.selectbox("Property Type", df['property type'].unique())
+with col2:
+    bedrooms = st.number_input("Bedrooms", min_value=1, max_value=10, value=3)
+with col3:
+    bathrooms = st.number_input("Bathrooms", min_value=1, max_value=10, value=2)
+with col4:
+    area = st.number_input("Area (sqft)", min_value=100, value=1200)
 
-    # LOCATION FEATURE: average price per location
-    location_avg_price = df.groupby('location')['price'].mean().to_dict()
-    df['location_avg_price'] = df['location'].map(location_avg_price)
+col5, col6 = st.columns(2)
+with col5:
+    location = st.selectbox("Location", df['location'].unique())
+with col6:
+    furnishing = st.selectbox("Furnishing Status", df['furnishing_status'].unique())
 
-    # One-hot encode categorical columns except location
-    df_encoded = pd.get_dummies(df, columns=['property type','furnishing_status'], drop_first=True)
+def format_price(num):
+    if num >= 1e7:
+        return f"{num/1e7:.2f} Cr"
+    elif num >= 1e5:
+        return f"{num/1e5:.2f} Lakh"
+    else:
+        return f"{num:,.0f}"
 
-    # Polynomial features for numeric columns
+# 6️⃣ Predict button
+if st.button("Predict Price"):
+    # Prepare input
+    input_df = pd.DataFrame({
+        'bedrooms':[bedrooms],
+        'bathrooms':[bathrooms],
+        'area sqft':[area],
+        'total_rooms':[bedrooms+bathrooms],
+        'price_per_sqft':[0],  # placeholder, scaled later
+        'location_avg_price':[df[df['location']==location]['price'].mean()],
+        'property type_House':[1 if prop_type=="House" else 0],
+        'property type_Apartment':[1 if prop_type=="Apartment" else 0],
+        'furnishing_status_Furnished':[1 if furnishing=="Furnished" else 0],
+        'furnishing_status_Unfurnished':[1 if furnishing=="Unfurnished" else 0]
+    })
+
+    # Polynomial features
     num_features = ['bedrooms','bathrooms','area sqft','total_rooms','price_per_sqft','location_avg_price']
     poly = PolynomialFeatures(degree=2, interaction_only=False, include_bias=False)
-    poly_features = poly.fit_transform(df_encoded[num_features])
+    poly_features = poly.fit_transform(input_df[num_features])
     poly_feature_names = poly.get_feature_names_out(num_features)
-    df_poly = pd.DataFrame(poly_features, columns=poly_feature_names, index=df_encoded.index)
+    df_poly = pd.DataFrame(poly_features, columns=poly_feature_names)
 
-    # Merge polynomial features with categorical
-    df_encoded = pd.concat([df_poly, df_encoded.drop(columns=num_features + ['location'])], axis=1)
+    # Merge with categorical
+    input_df_final = pd.concat([df_poly, input_df.drop(columns=num_features)], axis=1)
 
-    # Scale numeric features
-    scaler = RobustScaler()
-    df_encoded[poly_feature_names] = scaler.fit_transform(df_encoded[poly_feature_names])
+    # Scale numeric
+    input_df_final[poly_feature_names] = scaler.transform(df_poly)
 
-    # Replace any inf/nan
-    df_encoded = df_encoded.replace([np.inf,-np.inf],0).fillna(0)
+    # Align columns
+    input_df_final = input_df_final.reindex(columns=feature_cols, fill_value=0)
 
-    return df_encoded, scaler, df
+    # Predict with all models
+    preds = np.array([
+        lr_model.predict(input_df_final)[0],
+        dt_model.predict(input_df_final)[0],
+        rf_model.predict(input_df_final)[0],
+        gb_model.predict(input_df_final)[0]
+    ])
+    avg_pred = preds.mean()
 
-def train_models(df_encoded, cv_folds=5):
-    y = df_encoded['price']
-    X = df_encoded.drop(columns=['price'])
-    X = X.replace([np.inf,-np.inf],0).fillna(0)
+    # Confidence: lower std deviation → higher confidence
+    std_dev = preds.std()
+    confidence = max(0, 100 - std_dev/avg_pred*100)  # simple % confidence proxy
 
-    # Train/test split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # Initialize models
-    lr = LinearRegression()
-    dt = DecisionTreeRegressor(max_depth=15, random_state=42)
-    rf = RandomForestRegressor(n_estimators=500, max_depth=15, random_state=42, n_jobs=-1)
-    gb = HistGradientBoostingRegressor(max_iter=500, max_depth=5, learning_rate=0.05, random_state=42)
-
-    # Cross-validation
-    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
-    acc_lr = np.mean(cross_val_score(lr, X_train, y_train, cv=kf, scoring='r2'))
-    acc_dt = np.mean(cross_val_score(dt, X_train, y_train, cv=kf, scoring='r2'))
-    acc_rf = np.mean(cross_val_score(rf, X_train, y_train, cv=kf, scoring='r2'))
-    acc_gb = np.mean(cross_val_score(gb, X_train, y_train, cv=kf, scoring='r2'))
-
-    # Fit on full training set
-    lr.fit(X_train, y_train)
-    dt.fit(X_train, y_train)
-    rf.fit(X_train, y_train)
-    gb.fit(X_train, y_train)
-
-    # Holdout R²
-    y_pred_lr = lr.predict(X_test)
-    y_pred_dt = dt.predict(X_test)
-    y_pred_rf = rf.predict(X_test)
-    y_pred_gb = gb.predict(X_test)
-
-    holdout_acc_lr = r2_score(y_test, y_pred_lr)
-    holdout_acc_dt = r2_score(y_test, y_pred_dt)
-    holdout_acc_rf = r2_score(y_test, y_pred_rf)
-    holdout_acc_gb = r2_score(y_test, y_pred_gb)
-
-    print(f"[Holdout R²] LR: {holdout_acc_lr:.2f}, DT: {holdout_acc_dt:.2f}, RF: {holdout_acc_rf:.2f}, GB: {holdout_acc_gb:.2f}")
-
-    # Return models, feature columns, and CV accuracies
-    return lr, dt, rf, gb, X.columns, (acc_lr, acc_dt, acc_rf, acc_gb)
+    # Display predictions
+    st.subheader("Predicted Price")
+    st.write(f"**Linear Regression:** {format_price(preds[0])}")
+    st.write(f"**Decision Tree:** {format_price(preds[1])}")
+    st.write(f"**Random Forest:** {format_price(preds[2])}")
+    st.write(f"**Gradient Boosting:** {format_price(preds[3])}")
+    st.write(f"**Average Prediction:** {format_price(avg_pred)}")
+    st.write(f"**Model Confidence:** {confidence:.1f}%")
