@@ -26,27 +26,28 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
     df['total_rooms'] = df['bedrooms'] + df['bathrooms']
     df['price_per_sqft'] = df['price'] / df['area sqft']
 
-    # --- LOCATION FEATURE: average price per location ---
+    # LOCATION FEATURE: average price per location
     location_avg_price = df.groupby('location')['price'].mean().to_dict()
     df['location_avg_price'] = df['location'].map(location_avg_price)
 
-    # One-hot encode categorical columns except location (already handled)
+    # One-hot encode categorical columns except location
     df_encoded = pd.get_dummies(df, columns=['property type','furnishing_status'], drop_first=True)
 
-    # Polynomial features for numeric columns to capture non-linearities
+    # Polynomial features for numeric columns
     num_features = ['bedrooms','bathrooms','area sqft','total_rooms','price_per_sqft','location_avg_price']
     poly = PolynomialFeatures(degree=2, interaction_only=False, include_bias=False)
     poly_features = poly.fit_transform(df_encoded[num_features])
     poly_feature_names = poly.get_feature_names_out(num_features)
     df_poly = pd.DataFrame(poly_features, columns=poly_feature_names, index=df_encoded.index)
 
-    # Merge polynomial features with encoded categorical columns
+    # Merge polynomial features with categorical
     df_encoded = pd.concat([df_poly, df_encoded.drop(columns=num_features + ['location'])], axis=1)
 
     # Scale numeric features
     scaler = RobustScaler()
     df_encoded[poly_feature_names] = scaler.fit_transform(df_encoded[poly_feature_names])
 
+    # Replace any inf/nan
     df_encoded = df_encoded.replace([np.inf,-np.inf],0).fillna(0)
 
     return df_encoded, scaler, df
@@ -91,4 +92,5 @@ def train_models(df_encoded, cv_folds=5):
 
     print(f"[Holdout R²] LR: {holdout_acc_lr:.2f}, DT: {holdout_acc_dt:.2f}, RF: {holdout_acc_rf:.2f}, GB: {holdout_acc_gb:.2f}")
 
-    return lr, dt, rf, gb, X.columns
+    # Return models, feature columns, and CV accuracies
+    return lr, dt, rf, gb, X.columns, (acc_lr, acc_dt, acc_rf, acc_gb)
