@@ -50,7 +50,7 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
     # Replace any inf/nan
     df_encoded = df_encoded.replace([np.inf,-np.inf],0).fillna(0)
 
-    return df_encoded, scaler, df
+    return df_encoded, scaler, poly, poly_feature_names, df
 
 def train_models(df_encoded, cv_folds=5):
     y = df_encoded['price']
@@ -92,5 +92,5 @@ def train_models(df_encoded, cv_folds=5):
 
     print(f"[Holdout R²] LR: {holdout_acc_lr:.2f}, DT: {holdout_acc_dt:.2f}, RF: {holdout_acc_rf:.2f}, GB: {holdout_acc_gb:.2f}")
 
-    # Return models, feature columns, and CV accuracies
+    # Return models, feature columns, CV accuracies
     return lr, dt, rf, gb, X.columns, (acc_lr, acc_dt, acc_rf, acc_gb)
