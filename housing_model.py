@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-# -*- coding: utf-8 -*-
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, KFold, cross_val_score
 from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
-from sklearn.preprocessing import RobustScaler
+from sklearn.preprocessing import RobustScaler, PolynomialFeatures
 from sklearn.metrics import r2_score
 
 def load_and_preprocess(csv_file="House_prices (1).csv"):
@@ -27,13 +26,26 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
     df['total_rooms'] = df['bedrooms'] + df['bathrooms']
     df['price_per_sqft'] = df['price'] / df['area sqft']
 
-    # One-hot encoding
-    df_encoded = pd.get_dummies(df, columns=['property type','furnishing_status','location'], drop_first=True)
+    # --- LOCATION FEATURE: average price per location ---
+    location_avg_price = df.groupby('location')['price'].mean().to_dict()
+    df['location_avg_price'] = df['location'].map(location_avg_price)
 
-    # Scale numeric features with RobustScaler (better with outliers)
+    # One-hot encode categorical columns except location (already handled)
+    df_encoded = pd.get_dummies(df, columns=['property type','furnishing_status'], drop_first=True)
+
+    # Optionally: add polynomial features for numeric columns to capture non-linearities
+    num_features = ['bedrooms','bathrooms','area sqft','total_rooms','price_per_sqft','location_avg_price']
+    poly = PolynomialFeatures(degree=2, interaction_only=False, include_bias=False)
+    poly_features = poly.fit_transform(df_encoded[num_features])
+    poly_feature_names = poly.get_feature_names_out(num_features)
+    df_poly = pd.DataFrame(poly_features, columns=poly_feature_names, index=df_encoded.index)
+
+    # Merge polynomial features with encoded categorical columns
+    df_encoded = pd.concat([df_poly, df_encoded.drop(columns=num_features + ['location'])], axis=1)
+
+    # Scale numeric features
     scaler = RobustScaler()
-    num_features = ['bedrooms','bathrooms','area sqft','total_rooms','price_per_sqft']
-    df_encoded[num_features] = scaler.fit_transform(df_encoded[num_features])
+    df_encoded[poly_feature_names] = scaler.fit_transform(df_encoded[poly_feature_names])
 
     df_encoded = df_encoded.replace([np.inf,-np.inf],0).fillna(0)
 
