@@ -9,11 +9,7 @@ st.set_page_config(page_title="Karachi Housing Price Predictor", layout="wide")
 st.title("🏠 Karachi Housing Price Predictor")
 
 # 2️⃣ Load & preprocess dataset
-try:
-    df_encoded, scaler, poly, poly_feature_names, df = load_and_preprocess("House_prices (1).csv")
-except Exception as e:
-    st.error(f"Failed to load dataset: {e}")
-    st.stop()
+df_encoded, scaler, num_features, df = load_and_preprocess("House_prices (1).csv")
 
 # 3️⃣ Train models
 with st.spinner("Training models..."):
@@ -56,44 +52,43 @@ def format_price(num):
 # 6️⃣ Predict button
 if st.button("Predict Price"):
     # Prepare input
-    input_df = pd.DataFrame({
+    total_rooms = bedrooms + bathrooms
+    location_avg_price = df[df['location']==location]['price'].mean()
+    
+    input_dict = {
         'bedrooms':[bedrooms],
         'bathrooms':[bathrooms],
         'area sqft':[area],
-        'total_rooms':[bedrooms+bathrooms],
-        'price_per_sqft':[0],  # placeholder
-        'location_avg_price':[df[df['location']==location]['price'].mean()],
+        'total_rooms':[total_rooms],
+        'location_avg_price':[location_avg_price],
         'property type_House':[1 if prop_type=="House" else 0],
         'property type_Apartment':[1 if prop_type=="Apartment" else 0],
         'furnishing_status_Furnished':[1 if furnishing=="Furnished" else 0],
         'furnishing_status_Unfurnished':[1 if furnishing=="Unfurnished" else 0]
-    })
+    }
+    input_df = pd.DataFrame(input_dict)
 
-    # Polynomial transform using the trained poly
-    poly_features = poly.transform(input_df[['bedrooms','bathrooms','area sqft','total_rooms','price_per_sqft','location_avg_price']])
-    df_poly = pd.DataFrame(poly_features, columns=poly_feature_names)
+    # Scale numeric features
+    input_df[num_features] = scaler.transform(input_df[num_features])
 
-    # Merge with categorical columns
-    input_df_final = pd.concat([df_poly, input_df.drop(columns=['bedrooms','bathrooms','area sqft','total_rooms','price_per_sqft','location_avg_price'])], axis=1)
-
-    # Scale numeric features using the trained scaler
-    input_df_final[poly_feature_names] = scaler.transform(df_poly)
-
-    # Align columns with training set
-    input_df_final = input_df_final.reindex(columns=feature_cols, fill_value=0)
+    # Align columns
+    input_df = input_df.reindex(columns=feature_cols, fill_value=0)
 
     # Predict with all models
-    preds = np.array([
-        lr_model.predict(input_df_final)[0],
-        dt_model.predict(input_df_final)[0],
-        rf_model.predict(input_df_final)[0],
-        gb_model.predict(input_df_final)[0]
+    preds_log = np.array([
+        lr_model.predict(input_df)[0],
+        dt_model.predict(input_df)[0],
+        rf_model.predict(input_df)[0],
+        gb_model.predict(input_df)[0]
     ])
+
+    # Inverse log-transform
+    preds = np.expm1(preds_log)
     avg_pred = preds.mean()
 
     # Confidence: lower std deviation → higher confidence
     std_dev = preds.std()
-    confidence = max(0, 100 - std_dev/avg_pred*100)  # simple % confidence proxy
+    confidence = max(0, 100 - std_dev/avg_pred*100)
 
     # Display predictions
     st.subheader("Predicted Price")
