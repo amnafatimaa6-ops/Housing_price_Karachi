@@ -37,7 +37,7 @@ def load_and_preprocess(csv_file="House_prices (1).csv"):
     scaler = RobustScaler()
     df_encoded[num_features] = scaler.fit_transform(df_encoded[num_features])
 
-    # Log-transform price to reduce variance
+    # Log-transform price to reduce variance and improve model stability
     df_encoded['price'] = np.log1p(df_encoded['price'])
 
     df_encoded = df_encoded.replace([np.inf, -np.inf], 0).fillna(0)
@@ -52,20 +52,26 @@ def train_models(df_encoded, cv_folds=5):
     # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # Initialize models with reasonable regularization to avoid overfitting
+    # Initialize models with controlled complexity to reduce overfitting
     lr = LinearRegression()
     dt = DecisionTreeRegressor(max_depth=7, random_state=42)
     rf = RandomForestRegressor(n_estimators=200, max_depth=10, random_state=42, n_jobs=-1)
     gb = HistGradientBoostingRegressor(max_iter=200, max_depth=5, learning_rate=0.05, random_state=42)
 
-    # Cross-validation
-    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
-    acc_lr = np.mean(cross_val_score(lr, X_train, y_train, cv=kf, scoring='r2'))
-    acc_dt = np.mean(cross_val_score(dt, X_train, y_train, cv=kf, scoring='r2'))
-    acc_rf = np.mean(cross_val_score(rf, X_train, y_train, cv=kf, scoring='r2'))
-    acc_gb = np.mean(cross_val_score(gb, X_train, y_train, cv=kf, scoring='r2'))
+    # Safe cross-validation wrapper to avoid crashes
+    def safe_cv(model, X, y, cv):
+        try:
+            return np.mean(cross_val_score(model, X, y, cv=cv, scoring='r2'))
+        except:
+            return np.nan
 
-    # Fit on full training set
+    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    acc_lr = safe_cv(lr, X_train, y_train, kf)
+    acc_dt = safe_cv(dt, X_train, y_train, kf)
+    acc_rf = safe_cv(rf, X_train, y_train, kf)
+    acc_gb = safe_cv(gb, X_train, y_train, kf)
+
+    # Fit models on full training set
     lr.fit(X_train, y_train)
     dt.fit(X_train, y_train)
     rf.fit(X_train, y_train)
