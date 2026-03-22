@@ -5,10 +5,10 @@ def train_model():
     # Load data
     df = pd.read_csv("House_prices.csv")
 
-    # Clean
+    # Clean: drop empty columns
     df = df.dropna(axis=1, how='all')
 
-    # Ensure new columns exist
+    # Ensure property_type & furnishing_status exist
     if 'property_type' not in df.columns:
         df['property_type'] = 'House'  # default
     if 'furnishing_status' not in df.columns:
@@ -17,7 +17,7 @@ def train_model():
     # Keep only main features + new columns
     df = df[['bedrooms', 'bathrooms', 'area sqft', 'location', 'price', 'property_type', 'furnishing_status']]
 
-    # Location average price
+    # Calculate average price per location
     location_avg = df.groupby('location')['price'].mean()
     df['location_avg_price'] = df['location'].map(location_avg)
 
@@ -26,7 +26,8 @@ def train_model():
     df['furnishing_status_Unfurnished'] = (df['furnishing_status'] == 'Unfurnished').astype(int)
 
     # Features & target
-    X = df[['bedrooms', 'bathrooms', 'area sqft', 'location_avg_price', 'property_type_House', 'furnishing_status_Unfurnished']]
+    X = df[['bedrooms', 'bathrooms', 'area sqft', 'location_avg_price',
+            'property_type_House', 'furnishing_status_Unfurnished']]
     y = df['price']
 
     # Train model
