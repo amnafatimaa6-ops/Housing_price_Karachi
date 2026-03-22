@@ -27,6 +27,17 @@ property_type = st.sidebar.selectbox("Property Type", ["House", "Flat"])
 furnishing = st.sidebar.selectbox("Furnishing", ["Furnished", "Unfurnished"])
 
 # -------------------------
+# Helper: format price in Cr/Lakh
+# -------------------------
+def format_price(amount):
+    crore = amount // 10_000_00
+    lakh = (amount % 10_000_00) // 100_000
+    if crore > 0:
+        return f"{int(crore)} Cr {int(lakh)} Lakh"
+    else:
+        return f"{int(lakh)} Lakh"
+
+# -------------------------
 # Prediction
 # -------------------------
 if st.button("Predict Price 💰"):
@@ -44,8 +55,8 @@ if st.button("Predict Price 💰"):
     # Make prediction
     prediction = model.predict(input_data)[0]
 
-    # Format price in PKR
-    formatted_price = f"PKR {int(prediction):,}"
+    # Format price in Cr/Lakh
+    formatted_price = format_price(int(prediction))
 
     # Show results
     st.success(f"Estimated Price: {formatted_price}")
