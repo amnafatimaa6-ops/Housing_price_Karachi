@@ -4,6 +4,18 @@ from model import train_model
 
 st.title("🏡 House Price Predictor (Live Model)")
 
+# -------------------------
+# 💰 Price formatter (ADD THIS)
+# -------------------------
+def format_price_pkr(price):
+    crore = price // 10000000
+    lakh = (price % 10000000) // 100000
+
+    if crore > 0:
+        return f"{int(crore)} crore {int(lakh)} lakh"
+    else:
+        return f"{int(lakh)} lakh"
+
 # Train model ONCE (cached for performance)
 @st.cache_resource
 def load_model():
@@ -33,4 +45,7 @@ if st.button("Predict Price 💰"):
 
     prediction = model.predict(input_data)[0]
 
-    st.success(f"Estimated Price: PKR {int(prediction):,}")
+    # 👇 USE FORMATTER HERE
+    formatted_price = format_price_pkr(prediction)
+
+    st.success(f"Estimated Price: {formatted_price} 💰")
