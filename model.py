@@ -8,19 +8,30 @@ def train_model():
     # Clean
     df = df.dropna(axis=1, how='all')
 
-    # Keep only main features
-    df = df[['bedrooms', 'bathrooms', 'area sqft', 'location', 'price']]
+    # Keep only main features + new columns
+    df = df[['bedrooms', 'bathrooms', 'area sqft', 'location', 'price', 'property_type', 'furnishing_status']]
+
+    # Fill missing property_type or furnishing_status if any
+    df['property_type'] = df['property_type'].fillna('House')
+    df['furnishing_status'] = df['furnishing_status'].fillna('Furnished')
 
     # Location average price
     location_avg = df.groupby('location')['price'].mean()
     df['location_avg_price'] = df['location'].map(location_avg)
 
+    # Encode categorical features as 0/1
+    df['property_type_House'] = (df['property_type'] == 'House').astype(int)
+    df['furnishing_status_Unfurnished'] = (df['furnishing_status'] == 'Unfurnished').astype(int)
+
     # Features & target
-    X = df[['bedrooms', 'bathrooms', 'area sqft', 'location_avg_price']]
+    X = df[['bedrooms', 'bathrooms', 'area sqft', 'location_avg_price', 'property_type_House', 'furnishing_status_Unfurnished']]
     y = df['price']
 
     # Train model
     model = RandomForestRegressor(n_estimators=100, random_state=42)
     model.fit(X, y)
 
-    return model, location_avg
+    # Model confidence / accuracy
+    model_r2 = model.score(X, y)
+
+    return model, location_avg, model_r2
