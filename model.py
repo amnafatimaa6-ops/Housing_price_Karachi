@@ -8,12 +8,14 @@ def train_model():
     # Clean
     df = df.dropna(axis=1, how='all')
 
+    # Ensure new columns exist
+    if 'property_type' not in df.columns:
+        df['property_type'] = 'House'  # default
+    if 'furnishing_status' not in df.columns:
+        df['furnishing_status'] = 'Furnished'  # default
+
     # Keep only main features + new columns
     df = df[['bedrooms', 'bathrooms', 'area sqft', 'location', 'price', 'property_type', 'furnishing_status']]
-
-    # Fill missing property_type or furnishing_status if any
-    df['property_type'] = df['property_type'].fillna('House')
-    df['furnishing_status'] = df['furnishing_status'].fillna('Furnished')
 
     # Location average price
     location_avg = df.groupby('location')['price'].mean()
