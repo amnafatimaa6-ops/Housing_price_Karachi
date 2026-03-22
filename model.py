@@ -5,36 +5,37 @@ def train_model():
     # Load data
     df = pd.read_csv("House_prices.csv")
 
-    # Clean: drop empty columns
+    # Clean empty columns
     df = df.dropna(axis=1, how='all')
 
-    # Ensure property_type & furnishing_status exist
+    # Ensure new columns exist
     if 'property_type' not in df.columns:
-        df['property_type'] = 'House'  # default
+        df['property_type'] = 'House'
     if 'furnishing_status' not in df.columns:
-        df['furnishing_status'] = 'Furnished'  # default
+        df['furnishing_status'] = 'Furnished'
 
-    # Keep only main features + new columns
+    # Keep only relevant columns
     df = df[['bedrooms', 'bathrooms', 'area sqft', 'location', 'price', 'property_type', 'furnishing_status']]
 
-    # Calculate average price per location
+    # Location average price
     location_avg = df.groupby('location')['price'].mean()
     df['location_avg_price'] = df['location'].map(location_avg)
 
-    # Encode categorical features as 0/1
+    # Encode categorical features
     df['property_type_House'] = (df['property_type'] == 'House').astype(int)
     df['furnishing_status_Unfurnished'] = (df['furnishing_status'] == 'Unfurnished').astype(int)
 
-    # Features & target
-    X = df[['bedrooms', 'bathrooms', 'area sqft', 'location_avg_price',
-            'property_type_House', 'furnishing_status_Unfurnished']]
-    y = df['price']
+    # Train on price relative to location average to avoid crazy overshoot
+    df['price_rel'] = df['price'] / df['location_avg_price']
+
+    X = df[['bedrooms', 'bathrooms', 'area sqft', 'property_type_House', 'furnishing_status_Unfurnished']]
+    y = df['price_rel']
 
     # Train model
     model = RandomForestRegressor(n_estimators=100, random_state=42)
     model.fit(X, y)
 
-    # Model confidence / accuracy
+    # Model confidence
     model_r2 = model.score(X, y)
 
     return model, location_avg, model_r2
