@@ -1,93 +1,40 @@
-# -*- coding: utf-8 -*-
 import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split, KFold, cross_val_score
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
-from sklearn.preprocessing import RobustScaler
-from sklearn.metrics import r2_score
+import pickle
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
 
-def load_and_preprocess(csv_file="House_prices (1).csv"):
-    df = pd.read_csv(csv_file)
+# Load data
+df = pd.read_csv("House_prices.csv")
 
-    # Fix furnishing typo
-    df['furnishing_status'] = df['furnishing_status'].replace('huuuhuhhhhhhh', 'Furnished')
+# Clean
+df = df.dropna(axis=1, how='all')
 
-    # Numeric conversion
-    for col in ['bedrooms','bathrooms','area sqft','price']:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+# -------------------------
+# Keep ONLY main features
+# -------------------------
+df = df[['bedrooms', 'bathrooms', 'area sqft', 'location', 'price']]
 
-    # Drop NaNs and extreme outliers
-    df = df.dropna(subset=['bedrooms','bathrooms','area sqft','price'])
-    df = df[(df['area sqft'] > 100) & (df['price'] > 50000) & (df['price'] < 15e7)]
+# -------------------------
+# Location average price
+# -------------------------
+location_avg = df.groupby('location')['price'].mean()
+df['location_avg_price'] = df['location'].map(location_avg)
 
-    # Feature engineering
-    df['total_rooms'] = df['bedrooms'] + df['bathrooms']
+# -------------------------
+# Final features
+# -------------------------
+X = df[['bedrooms', 'bathrooms', 'area sqft', 'location_avg_price']]
+y = df['price']
 
-    # LOCATION FEATURE: average price per location
-    location_avg_price = df.groupby('location')['price'].mean().to_dict()
-    df['location_avg_price'] = df['location'].map(location_avg_price)
+# Split
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
 
-    # One-hot encode categorical columns except location
-    df_encoded = pd.get_dummies(df, columns=['property type','furnishing_status'], drop_first=True)
+# Train model
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
 
-    # Scale numeric features
-    num_features = ['bedrooms','bathrooms','area sqft','total_rooms','location_avg_price']
-    scaler = RobustScaler()
-    df_encoded[num_features] = scaler.fit_transform(df_encoded[num_features])
-
-    # Log-transform price to reduce variance and improve model stability
-    df_encoded['price'] = np.log1p(df_encoded['price'])
-
-    df_encoded = df_encoded.replace([np.inf, -np.inf], 0).fillna(0)
-
-    return df_encoded, scaler, num_features, df
-
-def train_models(df_encoded, cv_folds=5):
-    y = df_encoded['price']
-    X = df_encoded.drop(columns=['price'])
-    X = X.replace([np.inf, -np.inf], 0).fillna(0)
-
-    # Train/test split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # Initialize models with controlled complexity to reduce overfitting
-    lr = LinearRegression()
-    dt = DecisionTreeRegressor(max_depth=7, random_state=42)
-    rf = RandomForestRegressor(n_estimators=200, max_depth=10, random_state=42, n_jobs=-1)
-    gb = HistGradientBoostingRegressor(max_iter=200, max_depth=5, learning_rate=0.05, random_state=42)
-
-    # Safe cross-validation wrapper to avoid crashes
-    def safe_cv(model, X, y, cv):
-        try:
-            return np.mean(cross_val_score(model, X, y, cv=cv, scoring='r2'))
-        except:
-            return np.nan
-
-    kf = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
-    acc_lr = safe_cv(lr, X_train, y_train, kf)
-    acc_dt = safe_cv(dt, X_train, y_train, kf)
-    acc_rf = safe_cv(rf, X_train, y_train, kf)
-    acc_gb = safe_cv(gb, X_train, y_train, kf)
-
-    # Fit models on full training set
-    lr.fit(X_train, y_train)
-    dt.fit(X_train, y_train)
-    rf.fit(X_train, y_train)
-    gb.fit(X_train, y_train)
-
-    # Holdout R²
-    y_pred_lr = lr.predict(X_test)
-    y_pred_dt = dt.predict(X_test)
-    y_pred_rf = rf.predict(X_test)
-    y_pred_gb = gb.predict(X_test)
-
-    holdout_acc_lr = r2_score(y_test, y_pred_lr)
-    holdout_acc_dt = r2_score(y_test, y_pred_dt)
-    holdout_acc_rf = r2_score(y_test, y_pred_rf)
-    holdout_acc_gb = r2_score(y_test, y_pred_gb)
-
-    print(f"[Holdout R²] LR: {holdout_acc_lr:.2f}, DT: {holdout_acc_dt:.2f}, RF: {holdout_acc_rf:.2f}, GB: {holdout_acc_gb:.2f}")
-
-    return lr, dt, rf, gb, X.columns, (acc_lr, acc_dt, acc_rf, acc_gb)
+# Save everything
+pickle.dump(model, open("model.pkl", "wb"))
+pickle.dump(location_avg, open("location_avg.pkl", "wb"))
