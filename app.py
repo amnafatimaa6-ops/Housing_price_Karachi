@@ -66,17 +66,23 @@ if st.button("Predict Price 💰"):
     max_limit = location_ppsqft[location] * 8000
     base_price = max(min(base_price, max_limit), min_limit)
 
+    # Create estimate range ±7%
+    lower = int(base_price * 0.93)
+    upper = int(base_price * 1.07)
+
     # Format price
-    formatted_price = format_price(int(base_price))
+    formatted_lower = format_price(lower)
+    formatted_upper = format_price(upper)
 
     # Show result
-    st.success(f"Estimated Price: {formatted_price}")
+    st.success(f"Estimated Price Range: {formatted_lower} – {formatted_upper}")
     st.info(f"⚠️ Note: This price is based on average historical data in {location}. It is an estimate, not exact.")
 
     # Interactive price trend graph
     st.subheader("📊 Price Trend by Area")
     areas = np.linspace(300, 10000, 50)
-    prices = []
+    prices_lower = []
+    prices_upper = []
 
     for a in areas:
         p = location_ppsqft[location] * a
@@ -84,13 +90,15 @@ if st.button("Predict Price 💰"):
         p *= 1.05 if furnishing == "Furnished" else 0.97
         p *= (1 + (bedrooms + bathrooms) * 0.01)
         p = max(min(p, max_limit), min_limit)
-        prices.append(p)
+        prices_lower.append(p * 0.93)
+        prices_upper.append(p * 1.07)
 
-    fig = px.line(
+    fig = px.area(
         x=areas,
-        y=prices,
+        y=[prices_lower, prices_upper],
         labels={'x': 'Area (sqft)', 'y': 'Estimated Price (PKR)'},
-        title=f"Price Trend in {location}"
+        title=f"Price Estimate Range in {location}",
+        color_discrete_sequence=["lightblue", "lightgreen"]
     )
     st.plotly_chart(fig, use_container_width=True)
 
