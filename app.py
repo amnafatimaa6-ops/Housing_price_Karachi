@@ -1,15 +1,14 @@
 import streamlit as st
 import pandas as pd
-from model import train_model
-import matplotlib.pyplot as plt
 import numpy as np
+from model import train_model
+import plotly.express as px
 
 st.set_page_config(page_title="🏡 House Price Predictor", page_icon="🏠")
-
-st.title("🏡 House Price Predictor")
+st.title("🏡 House Price Predictor (Live Model)")
 
 # -------------------------
-# Load model
+# Load model once
 # -------------------------
 @st.cache_resource
 def load_model():
@@ -18,102 +17,82 @@ def load_model():
 location_ppsqft, model_r2 = load_model()
 
 # -------------------------
-# Sidebar Inputs
+# User Inputs (Sidebar)
 # -------------------------
 st.sidebar.header("Property Details")
-
 bedrooms = st.sidebar.slider("Bedrooms", 1, 10, 3)
 bathrooms = st.sidebar.slider("Bathrooms", 1, 7, 3)
 area = st.sidebar.slider("Area (sqft)", 300, 10000, 1500)
-
 location = st.sidebar.selectbox("Location", list(location_ppsqft.index))
 property_type = st.sidebar.selectbox("Property Type", ["House", "Flat"])
 furnishing = st.sidebar.selectbox("Furnishing", ["Furnished", "Unfurnished"])
 
 # -------------------------
-# Format price
+# Helper: format price in Cr/Lakh
 # -------------------------
 def format_price(amount):
     crore = amount // 10_00_000
     lakh = (amount % 10_00_000) // 100_000
-    return f"{int(crore)} Cr {int(lakh)} Lakh" if crore > 0 else f"{int(lakh)} Lakh"
+    if crore > 0:
+        return f"{int(crore)} Cr {int(lakh)} Lakh"
+    else:
+        return f"{int(lakh)} Lakh"
 
 # -------------------------
 # Prediction
 # -------------------------
 if st.button("Predict Price 💰"):
 
-    # Base price
+    # Base price = median price per sqft * area
     base_price = location_ppsqft[location] * area
 
-    # Adjustments
+    # Adjust for property type
     if property_type == "House":
-        base_price *= 1.25
-    else:
-        base_price *= 0.85
-
-    if furnishing == "Furnished":
         base_price *= 1.10
     else:
-        base_price *= 0.95
+        base_price *= 0.92
 
-    # Rooms effect
-    base_price *= (1 + (bedrooms + bathrooms) * 0.02)
+    # Adjust for furnishing
+    if furnishing == "Furnished":
+        base_price *= 1.05
+    else:
+        base_price *= 0.97
 
-    # -------------------------
-    # Price Range
-    # -------------------------
-    variation = 0.15
+    # Adjust for total rooms slightly
+    base_price *= (1 + (bedrooms + bathrooms) * 0.01)
 
-    min_price = base_price * (1 - variation)
-    max_price = base_price * (1 + variation)
+    # Clamp extreme values
+    min_limit = location_ppsqft[location] * 500
+    max_limit = location_ppsqft[location] * 8000
+    base_price = max(min(base_price, max_limit), min_limit)
 
-    formatted_min = format_price(int(min_price))
-    formatted_max = format_price(int(max_price))
+    # Format price
+    formatted_price = format_price(int(base_price))
 
-    # -------------------------
-    # Output
-    # -------------------------
-    st.success(f"💰 Estimated Price Range: {formatted_min} – {formatted_max}")
+    # Show result
+    st.success(f"Estimated Price: {formatted_price}")
+    st.info(f"⚠️ Note: This price is based on average historical data in {location}. It is an estimate, not exact.")
 
-    st.info(
-        f"📍 Based on average price per sqft in {location}. "
-        "Adjusted for property type, furnishing, and size."
-    )
-
-    st.write(f"📊 Model Confidence: {model_r2:.0%}")
-
-    st.caption("🏡 Tip: Actual price depends on exact block, condition, and market timing.")
-
-    # -------------------------
-    # Graph: Price vs Area
-    # -------------------------
-    st.subheader("📊 Price Trend (Area vs Price)")
-
+    # Interactive price trend graph
+    st.subheader("📊 Price Trend by Area")
     areas = np.linspace(300, 10000, 50)
     prices = []
 
     for a in areas:
         p = location_ppsqft[location] * a
-
-        if property_type == "House":
-            p *= 1.25
-        else:
-            p *= 0.85
-
-        if furnishing == "Furnished":
-            p *= 1.10
-        else:
-            p *= 0.95
-
-        p *= (1 + (bedrooms + bathrooms) * 0.02)
-
+        p *= 1.10 if property_type == "House" else 0.92
+        p *= 1.05 if furnishing == "Furnished" else 0.97
+        p *= (1 + (bedrooms + bathrooms) * 0.01)
+        p = max(min(p, max_limit), min_limit)
         prices.append(p)
 
-    fig, ax = plt.subplots()
-    ax.plot(areas, prices)
-    ax.set_xlabel("Area (sqft)")
-    ax.set_ylabel("Estimated Price (PKR)")
-    ax.set_title(f"Price Trend in {location}")
+    fig = px.line(
+        x=areas,
+        y=prices,
+        labels={'x': 'Area (sqft)', 'y': 'Estimated Price (PKR)'},
+        title=f"Price Trend in {location}"
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-    st.pyplot(fig)
+    # Model confidence
+    st.write(f"📊 Model Confidence (Estimated): {model_r2:.2%}")
