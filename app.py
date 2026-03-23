@@ -1,26 +1,21 @@
 import streamlit as st
 import pandas as pd
 from model import train_model
+import matplotlib.pyplot as plt
+import numpy as np
 
 st.set_page_config(page_title="🏡 House Price Predictor", page_icon="🏠")
 
-st.title("🏡 House Price Predictor (Live Model)")
+st.title("🏡 House Price Predictor")
 
 # -------------------------
-# Load model safely
+# Load model
 # -------------------------
 @st.cache_resource
 def load_model():
-    try:
-        return train_model()
-    except Exception as e:
-        st.error(f"Error loading model: {e}")
-        return None, None, None
+    return train_model()
 
-model, location_avg, model_r2 = load_model()
-
-if model is None:
-    st.stop()
+location_ppsqft, model_r2 = load_model()
 
 # -------------------------
 # Sidebar Inputs
@@ -31,56 +26,94 @@ bedrooms = st.sidebar.slider("Bedrooms", 1, 10, 3)
 bathrooms = st.sidebar.slider("Bathrooms", 1, 7, 3)
 area = st.sidebar.slider("Area (sqft)", 300, 10000, 1500)
 
-location = st.sidebar.selectbox("Location", list(location_avg.index))
+location = st.sidebar.selectbox("Location", list(location_ppsqft.index))
 property_type = st.sidebar.selectbox("Property Type", ["House", "Flat"])
 furnishing = st.sidebar.selectbox("Furnishing", ["Furnished", "Unfurnished"])
 
 # -------------------------
-# Format price function
+# Format price
 # -------------------------
 def format_price(amount):
     crore = amount // 10_00_000
     lakh = (amount % 10_00_000) // 100_000
-
-    if crore > 0:
-        return f"{int(crore)} Cr {int(lakh)} Lakh"
-    else:
-        return f"{int(lakh)} Lakh"
+    return f"{int(crore)} Cr {int(lakh)} Lakh" if crore > 0 else f"{int(lakh)} Lakh"
 
 # -------------------------
 # Prediction
 # -------------------------
 if st.button("Predict Price 💰"):
 
-    # Prepare input
-    input_data = pd.DataFrame([{
-        'bedrooms': bedrooms,
-        'bathrooms': bathrooms,
-        'area sqft': area,
-        'location_avg_price': location_avg[location],
-        'property_type_House': int(property_type == 'House'),
-        'furnishing_status_Unfurnished': int(furnishing == 'Unfurnished')
-    }])
+    # Base price
+    base_price = location_ppsqft[location] * area
 
-    try:
-        # Predict price per sqft
-        pred_ppsqft = model.predict(input_data)[0]
+    # Adjustments
+    if property_type == "House":
+        base_price *= 1.25
+    else:
+        base_price *= 0.85
 
-        # Final price
-        prediction = pred_ppsqft * area
+    if furnishing == "Furnished":
+        base_price *= 1.10
+    else:
+        base_price *= 0.95
 
-        formatted_price = format_price(int(prediction))
+    # Rooms effect
+    base_price *= (1 + (bedrooms + bathrooms) * 0.02)
 
-        # Output
-        st.success(f"💰 Estimated Price: {formatted_price}")
+    # -------------------------
+    # Price Range
+    # -------------------------
+    variation = 0.15
 
-        st.info(
-            f"⚠️ This prediction is based on average trends in {location}. "
-            "Final market prices may vary based on exact property conditions."
-        )
+    min_price = base_price * (1 - variation)
+    max_price = base_price * (1 + variation)
 
-        # Model confidence
-        st.write(f"📊 Model Confidence (R² Score): {model_r2:.2%}")
+    formatted_min = format_price(int(min_price))
+    formatted_max = format_price(int(max_price))
 
-    except Exception as e:
-        st.error(f"Prediction failed: {e}")
+    # -------------------------
+    # Output
+    # -------------------------
+    st.success(f"💰 Estimated Price Range: {formatted_min} – {formatted_max}")
+
+    st.info(
+        f"📍 Based on average price per sqft in {location}. "
+        "Adjusted for property type, furnishing, and size."
+    )
+
+    st.write(f"📊 Model Confidence: {model_r2:.0%}")
+
+    st.caption("🏡 Tip: Actual price depends on exact block, condition, and market timing.")
+
+    # -------------------------
+    # Graph: Price vs Area
+    # -------------------------
+    st.subheader("📊 Price Trend (Area vs Price)")
+
+    areas = np.linspace(300, 10000, 50)
+    prices = []
+
+    for a in areas:
+        p = location_ppsqft[location] * a
+
+        if property_type == "House":
+            p *= 1.25
+        else:
+            p *= 0.85
+
+        if furnishing == "Furnished":
+            p *= 1.10
+        else:
+            p *= 0.95
+
+        p *= (1 + (bedrooms + bathrooms) * 0.02)
+
+        prices.append(p)
+
+    fig, ax = plt.subplots()
+    ax.plot(areas, prices)
+    ax.set_xlabel("Area (sqft)")
+    ax.set_ylabel("Estimated Price (PKR)")
+    ax.set_title(f"Price Trend in {location}")
+
+    st.pyplot(fig)
