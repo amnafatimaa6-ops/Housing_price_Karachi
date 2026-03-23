@@ -1,106 +1,94 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from model import train_model
 
-st.set_page_config(page_title="🏡 House Price Estimator", page_icon="🏠")
+st.set_page_config(page_title="🏡 House Price Predictor", page_icon="🏠")
 
-st.title("🏡 Karachi House & Flat Price Estimator")
+st.title("🏡 House Price Predictor (Live Model)")
 
 # -------------------------
-# Load Data & Compute Averages
+# Load model once
 # -------------------------
 @st.cache_resource
-def load_data():
-    df = pd.read_csv("House_prices.csv").dropna()
-    # Ensure property_type and furnishing columns exist
-    if 'property_type' not in df.columns:
-        df['property_type'] = 'House'
-    if 'furnishing_status' not in df.columns:
-        df['furnishing_status'] = 'Furnished'
+def load_model():
+    return train_model()
 
-    # Compute average price per location + property_type
-    avg_prices = df.groupby(['location', 'property_type'])['price'].median()
-    
-    # Compute median area per location + property_type
-    median_area = df.groupby(['location', 'property_type'])['area sqft'].median()
-    
-    return df, avg_prices, median_area
-
-df, location_type_price, location_type_area = load_data()
+model, location_avg, model_r2 = load_model()
 
 # -------------------------
-# Sidebar Inputs
+# User Inputs
 # -------------------------
 st.sidebar.header("Property Details")
 bedrooms = st.sidebar.slider("Bedrooms", 1, 10, 3)
-bathrooms = st.sidebar.slider("Bathrooms", 1, 7, 2)
+bathrooms = st.sidebar.slider("Bathrooms", 1, 7, 3)
 area = st.sidebar.slider("Area (sqft)", 300, 10000, 1500)
-location = st.sidebar.selectbox("Location", sorted(df['location'].unique()))
+location = st.sidebar.selectbox("Location", list(location_avg.index))
 property_type = st.sidebar.selectbox("Property Type", ["House", "Flat"])
 furnishing = st.sidebar.selectbox("Furnishing", ["Furnished", "Unfurnished"])
 
 # -------------------------
-# Helper: format price in Cr/Lakh
+# Helper: format price safely in Cr/Lakh
 # -------------------------
-def format_price_lakh(amount):
-    if amount >= 100:
-        crore = amount // 100
-        lakh = amount % 100
-        return f"{int(crore)} Cr {int(lakh)} Lakh"
+def format_price_lakh(amount_lakh):
+    if amount_lakh >= 100:  # >= 1 Cr
+        crore = int(amount_lakh // 100)
+        lakh = int(amount_lakh % 100)
+        return f"{crore} Cr {lakh} Lakh"
     else:
-        return f"{int(amount)} Lakh"
+        return f"{int(round(amount_lakh))} Lakh"
 
 # -------------------------
 # Prediction
 # -------------------------
-if st.button("Estimate Price 💰"):
+if st.button("Predict Price 💰"):
 
-    # Base price: median price for location + property type
-    base_price = location_type_price.get((location, property_type), df['price'].median())
-    
-    # Convert to Lakh for calculations
-    base_price_lakh = base_price / 100_000
-    
-    # Median area for scaling
-    median_area = location_type_area.get((location, property_type), df['area sqft'].median())
-    
-    # Adjust for area
-    area_factor = area / median_area
-    adjusted_price_lakh = base_price_lakh * (0.9 + 0.2 * min(area_factor, 2))  # small scaling
-    
-    # Adjust for bedrooms & bathrooms
-    adjusted_price_lakh *= 1 + 0.03*(bedrooms-3)
-    adjusted_price_lakh *= 1 + 0.02*(bathrooms-2)
-    
-    # Furnishing adjustment
-    if furnishing == "Unfurnished":
-        adjusted_price_lakh *= 0.95
+    # Base input
+    input_data = pd.DataFrame([{
+        'bedrooms': bedrooms,
+        'bathrooms': bathrooms,
+        'area sqft': area,
+        'location_avg_price': location_avg[location],
+        'property_type_House': int(property_type == 'House'),
+        'furnishing_status_Unfurnished': int(furnishing == 'Unfurnished')
+    }])
 
-    # Price range ±5%
-    low_price = adjusted_price_lakh * 0.95
-    high_price = adjusted_price_lakh * 1.05
-    
+    # Predict price
+    prediction = model.predict(input_data)[0]
+
+    # Use location average to limit crazy predictions
+    loc_avg_price = location_avg[location]
+    min_estimate = loc_avg_price * 0.8  # 20% lower
+    max_estimate = loc_avg_price * 1.2  # 20% higher
+
+    # Convert PKR to Lakh
+    prediction_lakh = prediction / 100_000
+    low_price = min(min_estimate / 100_000, prediction_lakh)
+    high_price = max(max_estimate / 100_000, prediction_lakh)
+
     # Format prices
     formatted_low = format_price_lakh(low_price)
     formatted_high = format_price_lakh(high_price)
 
+    # Display results
+    st.success(f"Estimated Price Range: {formatted_low} – {formatted_high}")
+    st.info(f"⚠️ Note: This is an **average estimate** based on historical prices in {location}.")
+
+    # Show model confidence
+    st.write(f"📊 Model Confidence (R² Score): {model_r2:.2%}")
+
     # -------------------------
-    # Display Results
+    # Plot interactive graph
     # -------------------------
-    st.success(f"🏷 Estimated Price Range: {formatted_low} – {formatted_high}")
-    st.info(f"⚠️ This estimate is based on historical average prices in {location} for {property_type}s.")
-    
-    # -------------------------
-    # Interactive Plotly Graph
-    # -------------------------
-    fig = go.Figure(go.Bar(
-        x=[f"Min Estimate", f"Max Estimate"],
-        y=[low_price, high_price],
-        text=[formatted_low, formatted_high],
-        textposition='auto',
-        marker_color=['lightskyblue', 'lightgreen']
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=prediction_lakh,
+        title={'text': "Estimated Price (Lakh)"},
+        gauge={'axis': {'range': [0, max(high_price*1.2, 500)]},  # dynamic max
+               'bar': {'color': "green"},
+               'steps': [
+                   {'range': [0, low_price], 'color': "lightgray"},
+                   {'range': [low_price, high_price], 'color': "yellow"},
+                   {'range': [high_price, max(high_price*1.2, 500)], 'color': "red"}]}
     ))
-    fig.update_layout(title=f"📊 Price Range for {property_type} in {location}",
-                      yaxis_title="Price (Lakh PKR)")
-    
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, use_container_width=True)
