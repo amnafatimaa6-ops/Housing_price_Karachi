@@ -1,26 +1,26 @@
 import pandas as pd
 
 def train_model():
-    # Load data
+    # Load dataset
     df = pd.read_csv("House_prices.csv")
 
-    # Drop empty columns
+    # Drop fully empty columns
     df = df.dropna(axis=1, how='all')
 
-    # Ensure new columns exist
+    # Ensure property_type and furnishing_status exist
     if 'property_type' not in df.columns:
         df['property_type'] = 'House'
     if 'furnishing_status' not in df.columns:
         df['furnishing_status'] = 'Furnished'
 
-    # Keep main features + new columns
+    # Keep only necessary columns
     df = df[['bedrooms', 'bathrooms', 'area sqft', 'location', 'price', 'property_type', 'furnishing_status']]
 
-    # Compute median price per sqft per location
-    df['price_per_sqft'] = df['price'] / df['area sqft']
-    location_ppsqft = df.groupby('location')['price_per_sqft'].median()
+    # Median price per location & property type
+    location_type_median = df.groupby(['location','property_type'])['price'].median()
 
-    # Fake R² for reporting (we aren't training ML now, just using historical data)
-    model_r2 = 0.80  
+    # Median area per location & property type
+    location_type_area = df.groupby(['location','property_type'])['area sqft'].median()
 
-    return location_ppsqft, model_r2
+    # Store for app usage
+    return location_type_median, location_type_area
